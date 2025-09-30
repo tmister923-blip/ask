@@ -124,17 +124,82 @@ async function createAnonymousCard(message) {
         // Message content
         console.log('🎨 Step 6: Adding message content');
         ctx.fillStyle = '#333333';
-        ctx.font = '16px Arial';
+        
+        // Detect if message contains Arabic characters
+        const hasArabic = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(message);
+        
+        if (hasArabic) {
+            console.log('🔄 Arabic text detected, using appropriate font');
+            // Try different font combinations for Arabic support
+            // Ubuntu/Debian servers often have DejaVu fonts
+            ctx.font = '16px "Noto Sans Arabic", "DejaVu Sans", "Liberation Sans", "Ubuntu", "Droid Sans", sans-serif';
+            ctx.direction = 'rtl'; // Right-to-left for Arabic
+            
+            console.log('🔍 Testing Arabic font rendering capability...');
+            
+            // Test if Arabic rendering works by measuring a simple Arabic character
+            const testChar = 'ا'; // Arabic letter Alef
+            const testWidth = ctx.measureText(testChar).width;
+            
+            if (testWidth === 0) {
+                console.log('⚠️ Arabic font might not be available, trying generic fallback');
+                ctx.font = '16px monospace'; // Monospace as last resort
+            } else {
+                console.log('✅ Arabic font seems to be working, test width:', testWidth);
+            }
+        } else {
+            ctx.font = '16px Arial, "Liberation Sans", sans-serif';
+            ctx.direction = 'ltr'; // Left-to-right for English
+        }
         
         // Simple text display (no complex wrapping)
-        const maxLength = 50;
+        const maxLength = hasArabic ? 40 : 50; // Arabic might be wider
         const displayText = message.length > maxLength ? message.substring(0, maxLength - 3) + '...' : message;
+        
+        console.log('💬 Rendering text:', displayText, '| Direction:', ctx.direction, '| HasArabic:', hasArabic);
         
         try {
             ctx.fillText(displayText, width / 2, 160);
             console.log('✅ Message text rendered successfully');
+            
+            // Double-check if the text actually rendered (not just question marks)
+            if (hasArabic) {
+                // Try to detect if Arabic rendered as question marks by checking if all Arabic became '?'
+                const questionMarkCount = (displayText.match(/\?/g) || []).length;
+                const arabicCharCount = (displayText.match(/[\u0600-\u06FF]/g) || []).length;
+                
+                if (questionMarkCount > arabicCharCount / 2) {
+                    console.log('⚠️ Detected possible question mark rendering issue');
+                    throw new Error('Arabic text likely rendered as question marks');
+                }
+            }
         } catch (msgError) {
             console.error('❌ Message text failed:', msgError);
+            // Fallback: try without special font settings
+            try {
+                console.log('🔄 Trying fallback text rendering...');
+                ctx.font = '16px Arial';
+                ctx.direction = 'ltr';
+                
+                // If Arabic text failed, show a translated message
+                let fallbackText = displayText;
+                if (hasArabic) {
+                    fallbackText = '[Arabic Message: ' + message.length + ' characters]';
+                    console.log('🔄 Using Arabic fallback text:', fallbackText);
+                }
+                
+                ctx.fillText(fallbackText, width / 2, 160);
+                console.log('✅ Fallback text rendering succeeded');
+            } catch (fallbackError) {
+                console.error('❌ Even fallback text failed:', fallbackError);
+                // Final fallback: just show that there's a message
+                try {
+                    ctx.fillText('[Anonymous Message]', width / 2, 160);
+                    console.log('✅ Final text fallback succeeded');
+                } catch (finalError) {
+                    console.error('❌ All text rendering failed:', finalError);
+                }
+            }
         }
         
         // Footer
